@@ -1,0 +1,44 @@
+GSA overlap script:
+
+# Executed by Sabine Grol on 26/03/2025
+# R
+# Performed in R studio in the JupyterHub environment
+
+# Change working directory
+setwd("~/GSA_overlap")
+
+# Read data file 1
+data_NEU_GSA = read.table("NEU_magma.gsa.out",header = TRUE)
+
+# Look at the structure of the data frame
+head(data_NEU_GSA)
+
+# Print a list of gene sets with p < 0.05
+data_NEU_GSA[data_NEU_GSA["P"] < 0.05,]
+
+# Make a subset of gene sets that survive Bonferroni correction in this set
+subset_data_NEU_GSA = data_NEU_GSA[data_NEU_GSA["P"] < 0.05/nrow(data_NEU_GSA),]
+
+# Print a list of gene sets that are significant
+subset_data_NEU_GSA[c("FULL_NAME")]
+
+# Read data file 2
+data_WBC_GSA = read.table("WBC_magma.gsa.out", header = TRUE)
+
+# Look at the structure of the data frame
+head(data_WBC_GSA)
+
+# Print a list of gene sets with p < 0.05
+data_WBC_GSA[data_WBC_GSA["P"] < 0.05,]
+
+# Make a subset of gene sets that survive Bonferroni correction in this set
+subset_data_WBC_GSA = data_WBC_GSA[data_WBC_GSA["P"] < 0.05/nrow(data_WBC),]
+
+# Print a list of gene sets that are significant
+subset_data_WBC_GSA[c("FULL_NAME")]
+
+# Find overlapping gene sets using merge (based on the "GENE" column, which is assumed to be a unique identifier)
+overlapping_gsa = merge(subset_data_NEU_GSA, subset_data_WBC_GSA, by = "FULL_NAME")
+
+# Print the overlapping gene sets
+print(overlapping_gsa)

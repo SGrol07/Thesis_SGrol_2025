@@ -1,0 +1,134 @@
+LAVA plots script:
+
+# Executed by Sabine Grol on 04/04/2025
+# R
+# Performed in R studio in the JupyterHub environment
+
+# NEUROTICISM results from LAVA
+# # # # # # # # # # # # # # # #
+# Read in lava results, genomic region file, select your trait (abbreviation)
+# Plot and save your results
+
+# Change working directory
+setwd("~/LAVA")
+
+packageurl <- "http://cran.r-project.org/src/contrib/Archive/MASS/MASS_7.3-60.tar.gz"
+
+install.packages(packageurl, repos=NULL, type="source")
+
+install.packages("ggplot2")
+install.packages("readr")
+install.packages("dplyr")
+
+# necessary packages
+#install.packages("ggplot2")
+#install.packages("dplyr")
+#install.packages("readr")
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(data.table)
+library(LAVA)
+
+# read in LAVA result file
+df = fread("Neuroticism_LAVA.txt")
+
+# read loci data (genomic regions used in LAVA)
+loci <- read.loci("s2500_m25_f1_w200.inclX.blocks")
+colnames(loci) <- c("locus","CHR","START","STOP","size.filt", "size.all") #change headers to fit the below function
+
+# Plotting function to make LAVA figure
+plot_chr <- function(data, title, threshold) {
+  ggplot(data, aes(x = factor(locus), y = log_p_sign, fill = factor(CHR %% 2))) +
+    geom_col(width = 10) +
+    scale_fill_manual(values = c("#a6cee3", "#1f78b4"), guide = "none") +
+    facet_grid(~ CHR, scales = "free_x", space = "free_x", switch = "x") +
+    labs(title = title, y = expression(-log[10](italic(p)) %*% sign(rho)), x = "Chromosome") +
+    theme_minimal(base_size = 14) + 
+    theme(
+      panel.spacing = unit(0.2, "lines"),
+      panel.grid.major = element_blank(),
+      axis.text.x = element_blank(),
+      axis.ticks.x = element_blank(),
+      strip.text = element_text(margin = margin(0,0,0,0)),
+      strip.placement = "inside",
+      panel.border = element_rect(color = "white", fill = NA, size = 1),
+      strip.background = element_rect(color = "white", size = 1)
+    ) + geom_hline(yintercept = c(threshold, -threshold), color = "red", linetype = "solid")
+}
+
+
+# select your trait of interest: ADD ARX ASD BMI CAD EDU HEI HYP INS INT MDD SCZ ULC WBC
+trait <- "WBC"  # Put the abbreviation of your trait between the "".
+
+# Subset the whole file to only contain results with your trait
+df_sub <- df %>% filter(phen2 == trait)
+
+# Combine genomic loci file with results such that we can plot the entire genome
+# At the same time we are making the y-axis be significance * whether the genetic correlation is positive or negative
+plot_data <- left_join(loci, df_sub, by = "locus") %>%
+  mutate(log_p_sign = ifelse(!is.na(p) & p > 0, sign(rho) * -log10(p), NA_real_)) %>%
+  mutate(log_p_sign = ifelse(is.na(log_p_sign), 0, log_p_sign)) # %>%
+  #filter(CHR != 23) # if errors occur when plotting, try removing chromosome 23 (for some this chromosome was not in the GWAS and gives an error when we try to plot it)
+
+# Multiple testing correction threshold to adjust significance by how many genetic correlations that were analysed.
+threshold <- -log10(0.05 / nrow(df_sub))
+
+# Plot and save results
+p = plot_chr(plot_data, paste("Local Genetic correlations between NEU vs WBC"), threshold)
+ggsave(paste0("plot_NEU_vs_WBC.pdf\"), p, width = 12, height = 4.5)
+
+# Next we plot locus zoom plots of Neuroticism and chosen trait for regions with significant LAVA local genetic correlations
+
+install.packages("locuszoomr")
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+install.packages("pillar")
+install.packages("cli")
+BiocManager::install("EnsDb.Hsapiens.v75")
+install.packages("R.utils")
+library(data.table)
+library(EnsDb.Hsapiens.v75)
+library(locuszoomr)
+library(readr)
+
+# Read in GWAS
+neu <- fread('NEU_Nagel.gz')
+trait <- fread('WBC.txt.gz') # replace by GWAS summary statistics of your trait of interest --> WBC
+lava_file <- fread("NEUvsWBC_bivar_lava.txt") # read in LAVA results file
+lava_file = lava_file[lava_file$p_bon<0.05,] # Filter to significant regions
+
+# Option 1: order by p-value and plot the top most significant loci
+lava_file = lava_file[order(lava_file$p_bon),] # order by p-value
+lava_file = lava_file[1:16]
+
+# Option 2: plot all significant loci
+lava_loci <- lava_file
+
+# Function to plot the regions in lava_loci
+for (ii in 1:nrow(lava_loci)){
+  c = lava_loci[ii,]$chr
+  st = lava_loci[ii,]$start
+  sp = lava_loci[ii,]$stop
+  locus_neu <- locus(neu,
+                     chrom = 'CHR', pos = 'BP', labs = 'RSID', p = 'P',
+                     seqname = c, xrange = c(st-1e5, sp+1e5),
+                     ens_db = 'EnsDb.Hsapiens.v75')
+  locus_trait <- locus(trait,
+                       chrom = 'CHR', pos = 'BP', labs = 'RSID', p = 'P',
+                       seqname = c, xrange = c(st-1e5, sp+1e5),
+                       ens_db = 'EnsDb.Hsapiens.v75')
+  png(paste0(c,'_',st, '_' ,sp, '.png'), width = 7, height = 5, units = 'in', res = 500)
+  multi_layout(nrow = 2,
+               plots = {
+                 locus_plot(locus_neu,
+                            use_layout = FALSE,
+                            legend_pos = NULL)
+                 locus_plot(locus_trait,
+                            use_layout = FALSE,
+                            legend_pos = NULL)
+               },)
+  dev.off()
+}
+
+# Plots were generated as .png files, which were manually downloaded.

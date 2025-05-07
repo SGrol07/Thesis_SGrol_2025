@@ -1,0 +1,72 @@
+Gene overlap script:
+
+# Executed by Sabine Grol on 26/03/2025
+# R
+# Performed in R studio in the JupyterHub environment
+
+# Change working directory
+setwd("~/Gene_overlap")
+
+# Read data file 1
+data_NEU = read.table("NEU_magma.genes.out",header = TRUE)
+
+# Look at the structure of the data frame
+head(data_NEU)
+
+# Print a list of genes with p < 0.05
+data_NEU[data_NEU["P"] < 0.05,]
+
+# Make a subset of genes that survive Bonferroni correction in this set
+subset_data_NEU = data_NEU[data_NEU["P"] < 0.05/nrow(data_NEU),]
+
+# Print a list of genes that are significant
+subset_data_NEU[c("GENE","SYMBOL")]
+
+# Read data file 2
+data_WBC = read.table("WBC_magma.genes.out", header = TRUE)
+
+# Look at the structure of the data frame
+head(data_WBC)
+
+# Print a list of genes with p < 0.05
+data_WBC[data_WBC["P"] < 0.05,]
+
+# Make a subset of genes that survive Bonferroni correction in this set
+subset_data_WBC = data_WBC[data_WBC["P"] < 0.05/nrow(data_WBC),]
+
+# Print a list of genes that are significant
+subset_data_WBC[c("GENE","SYMBOL")]
+
+# Find overlapping genes using merge (based on the "GENE" column, which is assumed to be a unique identifier)
+overlapping_genes = merge(subset_data_NEU, subset_data_WBC, by = "GENE")
+
+# Print the overlapping genes
+print(overlapping_genes)
+
+# Save the results to a table file
+write.csv(overlapping_genes, "Overlap_NEU_WBC.csv", row.names = FALSE)
+
+# Save the results to a txt file
+write.table(overlapping_genes, "overlap_NEU_WBC.txt", row.names = FALSE, quote = FALSE, sep = "\t")
+
+# The output was saved both as a .csv file and a .txt file, which were automatically stored on JupyterHub and manually downloaded. The downloaded .csv file was converted to a .xlsx file for ease of use.
+
+# Fisher exact test to check if found genes are more than expected:
+fisher.test(matrix(c(16245, 125, 2376, 92), nrow=2),
+     alternative="greater")
+
+# To view the proper p-value, make an object x which is the output for the fisher exact test
+x = fisher.test(matrix(c(16245, 125, 2376, 92), nrow=2),
+                alternative="greater")
+
+# Display x
+x
+
+# See what elements x exists off
+names(x)
+#[1] "p.value"     "conf.int"    "estimate"    "null.value" 
+#[5] "alternative" "method"      "data.name"
+
+# Call the element you are specifically interested in
+x$p.value
+

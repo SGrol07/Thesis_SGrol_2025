@@ -1,0 +1,298 @@
+# Pipeline for Neuroticism Project
+# harmonization_pipeline.R
+# R
+# Performbed by Jack Smith on 20/02/2025 in R studio in the JupyterHub environment
+# Edited for clarity for documentation by Sabine Grol on 21/03/2025
+
+# What already happened:
+# Raw GWAS summary statistics downloaded
+
+# This script
+# 1) Open the data, harmonise the columns (create columns needed, remove unneeded columns)
+# 2) Get the 1000 genomes reference data (done externally, but we load the file into R) 
+# 3) Removes Indels (within the for loop)
+# 4) Use the reference genome to fill in missing rsIDs and MAFs (within the loop)
+# 5) Remove low MAF values, check data, save files (within the loop)
+
+
+1.1 Cleaning of data files. This step is to clean the files, so that all faulty or missing data is filtered out, and to harmonise the columns so that the files have a similar structure to work with in the following analyses. 
+
+# Install and load the necessary packages:
+install.packages("data.table")
+install.packages("dplyr")
+install.packages("stringr")
+install.packages("R.utils") #needed for WBC only
+install.packages("psych")
+library(data.table)
+library(dplyr)
+library(stringr)
+library(R.utils)
+library(psych)
+
+# Set your working directory
+setwd("~/raw_GWAS_sumstats")
+
+I used the following script in R studio for the neuroticism file:
+
+print("start NEU")
+
+# Read in raw GWAS summary statistic data
+NEU = fread("../data/raw_GWAS_sumstats/head_NEU.txt.bgz", header=T, sep="\t", data.table=F)
+
+# Look at the data
+head(NEU)
+tail(NEU)
+summary(NEU)
+psych::describe(NEU)
+
+# Column names pre-cleaning
+colnames(NEU)
+
+# Count low_confidence_variants
+table(NEU$low_confidence_variant)
+
+# Filter out all variants that are "TRUE" for low_confidence_variant
+NEU <- NEU %>% filter(!low_confidence_variant)
+# Check it worked by rerunning: table(NEU$low_confidence_variant)
+
+# Variant column = chr:pos:ref:alt (see: https://docs.google.com/spreadsheets/d/1kvPoupSzsSFBNSztMzl04xMoSC3Kcx3CrjVf4yBmESU/edit?gid=227859291#gid=227859291)
+# Split this column into the four separate columns for chromosomes (CHR), basepairs (BP), alternative allele (A2), and the reference allele (A1)
+NEU[c("CHR", "BP", "A2", "A1")] <- do.call(rbind, strsplit(as.character(NEU$variant), ":"))
+# Check what happened
+head(NEU)
+
+# Re-make the SNP, this time with alleles in alphabetical order
+NEU$SNP = paste(paste(NEU$CHR,NEU$BP,sep=":"),
+                ifelse(NEU$A1<NEU$A2,paste(NEU$A1,NEU$A2,sep="_"),paste(NEU$A2,NEU$A1,sep="_")),sep=":")
+
+# Make an Effect Allele Frequency column (if minor allele is effect allele copy the MAF, otherwise 1-MAF)
+NEU$EAF <- ifelse(NEU$minor_allele==NEU$A1,NEU$minor_AF,(1-NEU$minor_AF))
+# Check what happened
+head(NEU)
+
+# Make an empty RSID column
+NEU$RSID <- NA
+
+# Check the data
+head(NEU)
+
+# Reorder and remove unnecessary columns
+print("reorder Neuroticism and remove unnecessary columns")
+which(colnames(NEU) == "EAF") # This is used to get the number of the column with a given name
+
+# Reorder the columns
+NEU = NEU[,c(16,18,12,13,15,14,8,9,11,5,3,17)]
+
+# Rename and/or remove the columns
+colnames(NEU) = c("SNP", "RSID", "CHR", "BP", "A1", "A2", "BETA", "SE", "P", "N", "MAF", "EAF")
+
+# Check the data
+head(NEU)
+summary(NEU)
+
+# Write new file
+fwrite(NEU, file = "../data/harmonised_data/NEU.txt", sep="\t", na=NA, quote=F)
+
+print("NEU complete")
+
+1.2 Then the following script for the WBC file:
+
+print("start White Blood Cell Count (Leukocyte Count)")
+
+# Read in raw GWAS summary statistic data
+# This was quite tricky with the vcf file, so the full-data version was used
+# Uncompress the .gz file to a temporary location
+temp_file <- tempfile(fileext = ".vcf")
+gunzip("../data/raw_GWAS_sumstats/head_WBC.vcf.gz", destname=temp_file, overwrite=T, remove=F)
+
+# Read only the header line with '#CHROM' and skip all '##' metadata
+header <- fread(temp_file, nrows = 1, skip = "#CHROM")
+
+# Read the rest of the file skipping the metadata
+WBC <- fread(temp_file, skip = "#CHROM", header = T)
+
+# Clean up the temporary uncompressed file
+unlink(temp_file) 
+
+# Check data
+head(WBC)
+
+# Column names pre-cleaning
+print(colnames(WBC))
+
+# Split the ieu-b-30 column into six separate columns (based on the FORMAT column)
+WBC[, c("ES", "SE", "LP", "AF", "SS", " RSID") := tstrsplit(`ieu-b-30`, ":", fixed = T)]
+	# Descriptions from meta data:
+	# ES = Effect size estimate relative to the alternative allele ... therefore alt_allele = effect allele
+	# SE = Standard error of effect size estimate
+	# LP = -log10 p-value for effect estimate
+	# AF = Alternate allele frequency in the association study
+	# SS = Sample size used to estimate genetic effect
+
+# Check how many do not pass the FILTER column
+table(WBC$FILTER) # If all columns PASS, proceed with the rest of the code
+
+# Remove the "#" in the "#CHROM" col name
+names(WBC)[names(WBC) == '#CHROM'] <- 'CHR'
+
+# Make sure unique SNP column is sorted alphabetically
+WBC$SNP = paste(paste(WBC$CHR,WBC$POS,sep=":"),
+                ifelse(WBC$REF<WBC$ALT,paste(WBC$REF,WBC$ALT,sep="_"),paste(WBC$ALT,WBC$REF,sep="_")),sep=":")
+
+# Check the data
+head(WBC)
+
+# Convert the columns to numeric
+WBC$AF <- as.numeric(WBC$AF)
+WBC$LP <- as.numeric(WBC$LP)
+WBC$ES <- as.numeric(WBC$ES)
+WBC$SE <- as.numeric(WBC$SE)
+WBC$SS <- as.numeric(WBC$SS)
+
+# Compute MAF from EAF (EAF here is currently AF (alternative allele frequency))
+WBC$MAF <-  ifelse(WBC$AF > 0.5, 1-WBC$AF, WBC$AF) # Make sure MAF shows MINOR allele frequency and not the major allele frequency
+
+# Convert LP (-log10 p-value to regular p-values)
+WBC$P <- 10^(-WBC$LP)
+
+# Check the data
+head(WBC)
+
+# Reorder and remove unnecessary columns
+print("reorder White Blood Cell Count and remove unnecessary columns")
+which(colnames(WBC)== "AF") # This is used to the number of the column with a given name
+
+# Reorder the columns
+WBC = WBC[,c(17,3,1,2,5,4,11,12,19,15,18,14)]
+
+# Rename and/or remove the columns
+colnames(WBC) = c("SNP", "RSID", "CHR", "BP", "A1", "A2", "BETA", "SE", "P", "N", "MAF", "EAF")
+
+# Check file
+head(WBC)
+summary(WBC)
+
+# Write new file
+fwrite(WBC, file = "../data/harmonised_data/WBC.txt", sep="\t", na=NA, quote=F) #Write new clean file
+
+print("WBC complete")
+
+1.3 Get the 1000 genomes reference data to check the files and input missing MAF. First we load and clean the 1000 genome references file:
+
+print("Step 1: Load reference genome data")
+
+# Load reference genome data
+ref_genome = fread("../data/reference_data/g1000_eur_allele_freqs_with_bp.txt", header=T, sep="\t", data.table=F)
+
+# Check file
+head(ref_genome)
+
+# Remove the "#" in the "#CHROM" col name
+names(ref_genome)[names(ref_genome) == '#CHROM'] <- 'CHR'
+
+# Make a SNP column for the reference genome file and make sure it is in alphabetical order
+ref_genome$SNP = paste(paste(ref_genome$CHR,ref_genome$bim_BP,sep=":"),
+                      ifelse(ref_genome$ALT<ref_genome$REF,paste(ref_genome$ALT,ref_genome$REF,sep="_"),paste(ref_genome$REF,ref_genome$ALT,sep="_")),sep=":")
+
+# Make MAF from ALT-FREQS
+ref_genome$ref_MAF <- ifelse(ref_genome$ALT_FREQS > 0.5, 1-ref_genome$ALT_FREQS, ref_genome$ALT_FREQS) #make sure MAF shows MINOR allele frequency
+
+# Subset to only relevant data
+ref_genome_subset <- ref_genome[, c("SNP", "bim_SNP", "ALT_FREQS", "ref_MAF")]
+
+# Rename the column names for clarity
+colnames(ref_genome_subset) <- c("SNP", "ref_rsID", "ref_EAF", "ref_MAF")
+
+# Check file
+head(ref_genome_subset)
+
+# Save reference genome data and write new clean file
+fwrite(ref_genome_subset, file = "../data/reference_data/cleaned_g1000_eur_allele_freqs_with_bp.txt", sep="\t", na=NA, quote=F)
+
+# Load the cleaned file
+ref_genome_subset = fread("../data/reference_data/cleaned_g1000_eur_allele_freqs_with_bp.txt", header=T, sep="\t", data.table=F)
+
+1.4 A loop was used to remove INDELs from the partially harmonised data and to use the reference genome data to fill in missing rsIDs and MAFs, remove lines with NA values, and remove rows with low MAF.
+
+# Start of loop
+
+print("Step 2: Remove INDELs from partially harmonised data")
+
+# Load harmonised data
+gwas_files <- list.files("../data/harmonised_data/", pattern=".txt")
+
+# Fix names to 3 letter codes
+names(gwas_files) <- gwas_files
+names(gwas_files) <- sprintf("%s",substr(names(gwas_files),1,3))
+
+# Read in data for all files:
+for (i in 1:length(names(gwas_files))) { 
+  assign(names(gwas_files)[i],fread(file=sprintf("../data/harmonised_data/harmonised/%s",gwas_files[i]),header=T,sep="\t",data.table=F))
+}
+
+# Check for indels:
+for (i in names(gwas_files)) {
+  file <- get(i)
+  file_name <- sprintf("%s",substr((gwas_files[[i]]),1,3))
+  print(sprintf("%s: start", file_name))
+  print(sprintf("Reading in: %s. SNP/Col numbers:", file_name))
+  print(dim(file)) # Length = Nsnps
+
+  # Remove all instances of >1 number and I/D letters from A1 and A2
+  file <- file[!(nchar(file$A2)>1),]
+  file <- file[!(nchar(file$A1)>1),]
+  file <- file[!(file$A1 == 'I'),]
+  file <- file[!(file$A1 == 'D'),]
+  file <- file[!(file$A2 == 'I'),]
+  file <- file[!(file$A2 == 'D'),]
+
+  print(sprintf("%s INDELs removed:", file_name))
+  print(nrow(file))
+
+  # Use reference genome to fill in missing rsIDs and MAFs
+  # Merge (left join) the reference genome columns to the sumstats
+  # If there is no reference_genome data for a given SNP, for now the reference genome columns will display NA
+  merged_file <- merge(file, ref_genome_subset, by = "SNP", all.x = T)
+
+  # If there was no data for RSID in the GWAS sumstats, add the ref_rsID value
+  merged_file$RSID[is.na(merged_file$RSID)] <- merged_file$ref_rsID[is.na(merged_file$RSID)]
+
+  # Remove rows where RSID and ref_rsID are different (but keep rows with NA handling applied)
+  filtered_merged_file <- subset(merged_file, RSID == ref_rsID | is.na(ref_rsID))
+
+  # Replace NAs in MAF col with values from ref_MAF col
+  filtered_merged_file$MAF[is.na(filtered_merged_file$MAF)] <- filtered_merged_file$ref_MAF[is.na(filtered_merged_file$MAF)]
+
+  # Remove ref_rsID, ref_EAF, ref_MAF cols
+  filtered_merged_file$ref_rsID <- NULL
+  filtered_merged_file$ref_EAF <- NULL
+  filtered_merged_file$ref_MAF <- NULL
+
+  # Rename the file df the name of the current GWAS_file
+  assign(paste(file_name), filtered_merged_file)
+  print(sprintf("%s refence genome rsIDs and MAF complete:", file_name))
+  print(nrow(filtered_merged_file))
+
+  # Rename filtered_merged_file as file
+  file <- filtered_merged_file
+
+  # Remove any instances of NA in the file
+  file <- na.omit(file)
+  print(sprintf("Omit NA values in %s. SNP/Col numbers:", file_name))
+  print(nrow(file)) #length = Nsnps
+
+  # Remove low MAFs
+  file <- file[file$MAF >= 0.01, ]
+  print(sprintf("Omit MAF < 0.01 in %s. SNP/Col numbers:", file_name))
+  print(nrow(file)) #length = Nsnps
+
+  # Rename the file df the name of the current GWAS_file
+  assign(paste(file_name), file)
+  print(sprintf("%s complete:", file_name))
+
+  # Write output file to "../data/temp/"
+  fwrite(file, file = sprintf("../data/harmonised_data/%s.txt.gz", file_name),row.names=F,sep="\t",na=NA,quote=F)
+  rm(file)
+}
+
+# End of loop

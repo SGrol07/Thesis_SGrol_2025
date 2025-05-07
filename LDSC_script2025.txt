@@ -1,0 +1,54 @@
+LDSC script:
+
+# Executed by Sabine Grol on 20/03/2025
+# Python
+# Performed in the terminal in a JupyterHub environment
+
+
+# Manually upload the cleaned files to Jupyter hub (NEU_Nagel.gz + WBC.txt.gz + w_hm3.snplist.bz2 + eur_w_ld_chr.tar.bz2)
+
+# Unzip files
+tar -jxvf eur_w_ld_chr.tar.bz2
+gunzip NEU_Nagel.gz
+gunzip WBC.txt.gz
+bunzip2 w_hm3.snplist.bz2
+
+# First run neuroticism
+# Check if unzipping went well and column names
+head NEU_Nagel
+
+# Convert to summary statistics
+# Ignore the SNP,CHR,BP,SE,MAF columns and use the RSID column as the snp column
+# Use the chunksize command to speed up the process
+munge_sumstats.py \
+--sumstats NEU_Nagel \
+--out NEU \
+--chunksize 500000 \
+--ignore SNP,CHR,BP,SE,MAF \
+--snp RSID \
+--merge-alleles w_hm3.snplist 
+
+# Then run WBC
+head WBC.txt
+
+# Convert to summary statistics
+# Ignore the SNP,CHR,BP,SE,MAF columns and use the RSID column as the snp column
+# Use the chunksize command to speed up the process
+munge_sumstats.py \
+--sumstats WBC.txt \
+--out WBC \
+--chunksize 500000 \
+--ignore SNP,CHR,BP,SE,MAF \
+--snp RSID \
+--merge-alleles w_hm3.snplist 
+
+# Now run the LDSC for possible genetic correlation
+# LD Score regression (genetic correlations)
+ldsc.py \
+--rg NEU.sumstats.gz,WBC.sumstats.gz \
+--ref-ld-chr eur_w_ld_chr/ \
+--w-ld-chr eur_w_ld_chr/ \
+--out NEU_WBC
+
+# Output is stored automatically on JupyterHub
+# Back-up copies were manually downloaded for safekeeping

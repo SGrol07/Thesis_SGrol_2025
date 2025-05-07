@@ -1,0 +1,37 @@
+LAVA analysis script:
+
+# Executed by Sabine Grol on 04/04/2025
+# R
+# Performed in R studio in the JupyterHub environment
+
+# Change working directory
+setwd("~/LAVA")
+
+lava <- read.table("NEUvsWBC_bivar_lava.txt", header = TRUE)
+
+total_loci <- nrow(lava)
+
+bonf_thresh <- 0.05 / total_loci
+
+# Filter for significant loci
+lava_sig <- lava %>% filter(p < bonf_thresh)
+
+# Count positive and negative correlations
+num_pos <- sum(lava_sig$rho > 0)
+num_neg <- sum(lava_sig$rho < 0)
+
+# Count significant loci per chromosome
+chr_table <- lava_sig %>%
+  group_by(chr) %>%
+  summarise(Significant_Loci = n()) %>%
+  arrange(as.numeric(chr))
+
+print(paste("Number of loci analysed:", total_loci))
+print(paste("Number of loci with significant correlations:", nrow(lava_sig)))
+print(paste("Number of positive correlations:", num_pos))
+print(paste("Number of negative correlations:", num_neg))
+
+print(chr_table)
+
+# Save the results to a csv file
+write.csv(chr_table, "chr_loci_WBC.csv", row.names = FALSE)

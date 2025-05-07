@@ -1,0 +1,15 @@
+FUMA script:
+
+# Parameters provided by Jack Smith on 17/03/2025
+# Executed by Sabine Grol on the FUMA website (https://fuma.ctglab.nl/) with the SNP2GENE function on 19/03/2025
+# The Neuroticism job was performed by Jack Smith on 20/03/2025 under the name NEU_Nagel, job # 598754 and the results were manually downloaded for analysis.
+
+For the WBC results, the summary statistics WBC.txt.gz file was manually uploaded. The following parameters were used:
+# Section 1: After uploading the summary statistics the column names were filled in (CHR/BP/RSID/P/A1/A2)
+# Section 2: Column name for N per SNP was added as "N"
+# Section 3-1 to 3-3: These were ignored
+# Section 4: Select Ensembl version v110, and select "all" for the gene type.
+# Section 5: Uncheck "exclude MHC region", as it is necessary to include for this trait due to the immune system involvement
+# Section 6: Check "include MAGMA" and select "GTEx v8: 54 tissue types" for the MAGMA gene expression analysis
+The job was given the title "WBC"; runtime was 3 hours.
+Plots and results were manually downloaded for further analysis.
